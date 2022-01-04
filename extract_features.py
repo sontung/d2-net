@@ -11,10 +11,11 @@ from tqdm import tqdm
 import scipy
 import scipy.io
 import scipy.misc
-
+import cv2
 from lib.model_test import D2Net
 from lib.utils import preprocess_image
 from lib.pyramid import process_multiscale
+from PIL import Image
 
 # CUDA
 use_cuda = torch.cuda.is_available()
@@ -79,10 +80,10 @@ model = D2Net(
 )
 
 # Process the file
-with open(args.image_list_file, 'r') as f:
-    lines = f.readlines()
+lines = ["/home/sontung/work/d2-net/qualitative/images/pair_1/2.jpg"]
 for line in tqdm(lines, total=len(lines)):
     path = line.strip()
+    print(path)
 
     image = imageio.imread(path)
     if len(image.shape) == 2:
@@ -92,10 +93,13 @@ for line in tqdm(lines, total=len(lines)):
     # TODO: switch to PIL.Image due to deprecation of scipy.misc.imresize.
     resized_image = image
     if max(resized_image.shape) > args.max_edge:
-        resized_image = scipy.misc.imresize(
-            resized_image,
-            args.max_edge / max(resized_image.shape)
-        ).astype('float')
+        print("resize")
+        pil_img = Image.fromarray(resized_image)
+        scale = args.max_edge / max(resized_image.shape)
+        pil_img = pil_img.resize((int(resized_image.shape[1]*scale),
+                                  int(resized_image.shape[0]*scale)))
+        resized_image = np.array(pil_img).astype("float")
+
     if sum(resized_image.shape[: 2]) > args.max_sum_edges:
         resized_image = scipy.misc.imresize(
             resized_image,
@@ -109,6 +113,7 @@ for line in tqdm(lines, total=len(lines)):
         resized_image,
         preprocessing=args.preprocessing
     )
+
     with torch.no_grad():
         if args.multiscale:
             keypoints, scores, descriptors = process_multiscale(
@@ -133,6 +138,16 @@ for line in tqdm(lines, total=len(lines)):
     keypoints[:, 1] *= fact_j
     # i, j -> u, v
     keypoints = keypoints[:, [1, 0, 2]]
+
+    img = resized_image.astype("uint8")
+    for x, y, _ in keypoints:
+        x, y = map(int, (x, y))
+        # cv2.circle(img, (y, x), 5, (0, 0, 255), -1)
+        cv2.circle(img, (x, y), 5, (255, 0, 0), -1)
+    img = cv2.resize(img, (img.shape[1]//2, img.shape[0]//2))
+    cv2.imshow("t", img)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
 
     if args.output_type == 'npz':
         with open(path + args.output_extension, 'wb') as output_file:
