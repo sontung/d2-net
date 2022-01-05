@@ -280,4 +280,4 @@ def extract_using_d2_net(image):
     keypoints[:, 1] *= fact_j
     # i, j -> u, v
     keypoints = keypoints[:, [1, 0, 2]]
-    return keypoints
+    return keypoints, scores
