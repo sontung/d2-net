@@ -1,11 +1,14 @@
 import argparse
+import os
+import pickle
+from pathlib import Path
 
 import numpy as np
 
 import imageio
 
 import torch
-
+import glob
 from tqdm import tqdm
 
 import scipy.io
@@ -172,7 +175,7 @@ def run_extraction(keypoint_only=False):
             raise ValueError('Unknown output type.')
 
 
-def extract_using_d2_net(image):
+def load_model():
     # CUDA
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -185,7 +188,7 @@ def extract_using_d2_net(image):
         help='image preprocessing (caffe or torch)'
     )
     parser.add_argument(
-        '--model_file', type=str, default='d2-net/models/d2_tf.pth',
+        '--model_file', type=str, default='models/d2_tf.pth',
         help='path to the full model'
     )
 
@@ -227,6 +230,10 @@ def extract_using_d2_net(image):
         use_relu=args.use_relu,
         use_cuda=use_cuda
     )
+    return model, args, device
+
+
+def extract_using_d2_net(image, model, args, device):
 
     if len(image.shape) == 2:
         image = image[:, :, np.newaxis]
@@ -392,3 +399,50 @@ def extract_and_describe_using_d2_net(image):
     # i, j -> u, v
     keypoints = keypoints[:, [1, 0, 2]]
     return keypoints, descriptors, scores
+
+
+def run_d2_detector_on_folder(images_folder, save_folder, image_list=None):
+    precomputed_file = f"{save_folder}/d2_keypoints_db.pkl"
+    my_file = Path(precomputed_file)
+    if my_file.is_file():
+        pass
+    else:
+        if image_list is None:
+            image_list = os.listdir(images_folder)
+        name2kp = {}
+        model, args, device = load_model()
+        for name in tqdm(image_list, desc="Running D2 detector on database images"):
+            im_name = os.path.join(images_folder, name)
+            img = cv2.imread(im_name)
+            keypoints, responses = extract_using_d2_net(img, model, args, device)
+            name2kp[name] = (keypoints, responses)
+        with open(precomputed_file, 'wb') as handle:
+            pickle.dump(name2kp, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return precomputed_file
+
+
+def d2_feature_detection(img_, vis=False):
+    model, args, device = load_model()
+    strongest_keypoints, responses = extract_using_d2_net(img_, model, args, device)
+    if vis:
+        indices = np.argsort(responses)[-1000:]
+        for idx, (x2, y2, _) in enumerate(strongest_keypoints[indices]):
+            x2, y2 = map(int, (x2, y2))
+            cv2.circle(img_, (x2, y2), 5, (128, 128, 0), 1)
+        cv2.imwrite("test.png", img_)
+    return strongest_keypoints
+
+
+def find_images_7_scenes(images_folder):
+    images = glob.glob(f"{images_folder}/*/*.color.png")
+    return images
+
+
+if __name__ == '__main__':
+    list_ = find_images_7_scenes("/home/n11373598/work/redkitchen/images")
+
+    run_d2_detector_on_folder("/home/n11373598/work/redkitchen/images",
+                              "/home/n11373598/work/d2-net",
+                              list_
+                              )
+
