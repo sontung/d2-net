@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import cv2
+import numpy as np
 import torchvision.models as models
 
 
@@ -25,7 +26,7 @@ class DenseFeatureExtractionModule(nn.Module):
         conv4_3_idx = vgg16_layers.index('conv4_3')
 
         self.model = nn.Sequential(
-            *list(model.features.children())[: conv4_3_idx + 1]
+            *list(model.features.children())[:conv4_3_idx + 1]
         )
 
         self.num_channels = 512
@@ -35,7 +36,7 @@ class DenseFeatureExtractionModule(nn.Module):
             param.requires_grad = False
         if finetune_feature_extraction:
             # Unlock conv4_3
-            for param in list(self.model.parameters())[-2 :]:
+            for param in list(self.model.parameters())[-2:]:
                 param.requires_grad = True
 
         if use_cuda:
@@ -81,6 +82,14 @@ class SoftDetectionModule(nn.Module):
         return score
 
 
+class SceneCoordinateNet(nn.Module):
+    def __int__(self):
+        super(SceneCoordinateNet, self).__init__()
+
+    def forward(self, dense_features):
+        return
+
+
 class D2Net(nn.Module):
     def __init__(self, model_file=None, use_cuda=True):
         super(D2Net, self).__init__()
@@ -99,28 +108,33 @@ class D2Net(nn.Module):
                 self.load_state_dict(torch.load(model_file, map_location='cpu')['model'])
 
     def forward(self, batch):
-        b = batch['image1'].size(0)
-
-        dense_features = self.dense_feature_extraction(
-            torch.cat([batch['image1'], batch['image2']], dim=0)
-        )
-
+        dense_features = self.dense_feature_extraction(batch['image'])
         scores = self.detection(dense_features)
-
-        dense_features1 = dense_features[: b, :, :, :]
-        dense_features2 = dense_features[b :, :, :, :]
-
-        scores1 = scores[: b, :, :]
-        scores2 = scores[b :, :, :]
-
+        print(scores.shape)
+        print(dense_features.shape)
         return {
-            'dense_features1': dense_features1,
-            'scores1': scores1,
-            'dense_features2': dense_features2,
-            'scores2': scores2
+            'dense_features': dense_features,
+            'scores': scores,
         }
 
 
 if __name__ == '__main__':
-    m = DenseFeatureExtractionModule()
-    print(m)
+    from utils import preprocess_image
+    img = cv2.imread("../test.png")
+
+    input_image = preprocess_image(
+        img,
+        preprocessing="caffe"
+    )
+    input_image = torch.tensor(
+                    input_image[np.newaxis, :, :, :].astype(np.float32),
+                    device="cuda"
+                )
+    model = D2Net()
+
+    out = model({"image": input_image})
+    dense = out["dense_features"]
+
+    scene_model = SceneCoordinateNet()
+    out2 = scene_model(dense)
+

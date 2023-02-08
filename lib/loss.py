@@ -58,15 +58,7 @@ def loss_function(
 
         # Warp the positions from image 1 to image 2
         fmap_pos1 = grid_positions(h1, w1, device)
-        pos1 = upscale_positions(fmap_pos1, scaling_steps=scaling_steps)
-        try:
-            pos1, pos2, ids = warp(
-                pos1,
-                depth1, intrinsics1, pose1, bbox1,
-                depth2, intrinsics2, pose2, bbox2
-            )
-        except EmptyTensorError:
-            continue
+
         fmap_pos1 = fmap_pos1[:, ids]
         descriptors1 = descriptors1[:, ids]
         scores1 = scores1[ids]
@@ -76,9 +68,7 @@ def loss_function(
             continue
 
         # Descriptors at the corresponding positions
-        fmap_pos2 = torch.round(
-            downscale_positions(pos2, scaling_steps=scaling_steps)
-        ).long()
+
         descriptors2 = F.normalize(
             dense_features2[:, fmap_pos2[0, :], fmap_pos2[1, :]],
             dim=0

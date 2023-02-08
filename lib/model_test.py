@@ -185,3 +185,7 @@ class HandcraftedLocalizationModule(nn.Module):
         del inv_hess_00, inv_hess_01, inv_hess_11, di, dj
 
         return torch.stack([step_i, step_j], dim=1)
+
+
+if __name__ == '__main__':
+    m = DenseFeatureExtractionModule()
